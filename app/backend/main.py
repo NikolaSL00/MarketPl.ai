@@ -1,13 +1,40 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from pymongo import MongoClient
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from database import ensure_indexes, cleanup_orphaned_prices, mongo_client
+from routers import imports, stock_prices
 
 
-app = FastAPI(title=settings.app_name)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure database indexes exist
+    ensure_indexes()
+    # Clean up orphaned data from interrupted imports
+    cleanup_orphaned_prices()
+    yield
+    # Shutdown: close MongoDB connection
+    mongo_client.close()
 
-mongo_client = MongoClient(settings.mongodb_uri)
-database = mongo_client[settings.mongodb_db_name]
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+# CORS – allow the frontend dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount routers
+app.include_router(imports.router)
+app.include_router(stock_prices.router)
 
 
 @app.get("/health")

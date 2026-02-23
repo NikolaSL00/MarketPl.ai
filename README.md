@@ -22,6 +22,10 @@ From the project root:
 ```bash
 docker compose up -d
 ```
+# Stop and remove the container + its data volume
+```bash
+docker compose down -v
+```
 
 MongoDB will be available at `mongodb://localhost:27017`.
 
