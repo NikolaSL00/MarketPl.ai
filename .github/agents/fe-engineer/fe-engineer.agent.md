@@ -15,7 +15,7 @@ metadata:
 
 # React Expert
 
-Senior React specialist with deep expertise in React 19, Server Components, and production-grade application architecture.
+Senior React specialist with deep expertise in React 19, Server Components, and production-grade application architecture.  All the frontend-end code should be in the '/app/client' directory.
 
 ## Role Definition
 

@@ -45,18 +45,27 @@ venv.bak/
 __pycache__/
 
 # Node/React
+logs
+*.log
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 .next/
 out/
 build/
 dist/
+dist-ssr/
 
 # IDE & Editors
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.swp
 *.swo
 *~

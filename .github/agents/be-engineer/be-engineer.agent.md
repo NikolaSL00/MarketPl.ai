@@ -5,7 +5,7 @@ description: Python backend development expertise for FastAPI, security patterns
 
 # python-backend
 
-Production-ready Python backend patterns for FastAPI, SQLAlchemy, and Upstash.
+Production-ready Python backend patterns for FastAPI, SQLAlchemy, and Upstash. All the back-end code should be in the '/app/backend' directory.
 
 ## When to Use This Skill
 
@@ -29,19 +29,21 @@ Production-ready Python backend patterns for FastAPI, SQLAlchemy, and Upstash.
 ### Project Structure
 
 ```
-src/
-├── auth/
-│   ├── router.py      # endpoints
-│   ├── schemas.py     # pydantic models
-│   ├── models.py      # db models
-│   ├── service.py     # business logic
-│   └── dependencies.py
-├── posts/
-│   └── ...
-├── config.py
-├── database.py
-└── main.py
+├── backend/
+    ├─src/
+    ├── auth/
+    │   ├── router.py      # endpoints
+    │   ├── schemas.py     # pydantic models
+    │   ├── models.py      # db models
+    │   ├── service.py     # business logic
+    │   └── dependencies.py
+    ├── posts/
+    │   └── ...
+    ├── config.py
+    ├── database.py
+    └── main.py
 ```
+
 
 ### Async Routes
 
