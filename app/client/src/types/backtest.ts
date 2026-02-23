@@ -112,3 +112,34 @@ export const DEFAULT_MA_PARAMS: MACrossoverParams = {
   short_window: 50,
   long_window: 200,
 }
+
+// ── Compare types ────────────────────────────────────────────────────────────
+
+export interface StrategyConfig {
+  strategy: StrategyType
+  strategy_params: StrategyParams | null
+}
+
+export interface CompareRequest {
+  symbol: string
+  date_from: string
+  date_to: string
+  initial_capital: number
+  strategies: StrategyConfig[]
+}
+
+export interface CompareResponse {
+  symbol: string
+  security_name?: string | null
+  date_from: string
+  date_to: string
+  initial_capital: number
+  results: BacktestResponse[]
+}
+
+/** Per-strategy palette used across all compare charts and tables */
+export const STRATEGY_COLORS: Record<StrategyType, string> = {
+  buy_and_hold: '#06b6d4',   // cyan
+  dca: '#f59e0b',            // amber
+  ma_crossover: '#a78bfa',   // violet
+}

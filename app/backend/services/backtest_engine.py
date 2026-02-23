@@ -21,11 +21,14 @@ from database import stock_prices_collection
 from schemas.backtest import (
     BacktestRequest,
     BacktestResponse,
+    CompareRequest,
+    CompareResponse,
     DCAInterval,
     DCAParams,
     EquityPoint,
     MACrossoverParams,
     PerformanceMetrics,
+    StrategyConfig,
     StrategyType,
     TradeRecord,
 )
@@ -402,4 +405,83 @@ def run_backtest(request: BacktestRequest) -> BacktestResponse:
         equity_curve=equity_curve,
         metrics=metrics,
         trades=trades,
+    )
+
+
+def _run_single_strategy(
+    strategy_cfg: StrategyConfig,
+    prices: pd.DataFrame,
+    initial_capital: float,
+    symbol: str,
+    security_name: Optional[str],
+    date_from: str,
+    date_to: str,
+) -> BacktestResponse:
+    """Run one strategy config against already-fetched prices."""
+    params = strategy_cfg.strategy_params or {}
+    total_invested = initial_capital
+
+    if strategy_cfg.strategy == StrategyType.buy_and_hold:
+        equity, trades = _run_buy_and_hold(prices, initial_capital)
+
+    elif strategy_cfg.strategy == StrategyType.dca:
+        dca_p = DCAParams(**params)
+        equity, trades, total_invested = _run_dca(prices, dca_p)
+
+    elif strategy_cfg.strategy == StrategyType.ma_crossover:
+        ma_p = MACrossoverParams(**params)
+        equity, trades = _run_ma_crossover(prices, initial_capital, ma_p)
+
+    else:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Unknown strategy.")
+
+    metrics = _compute_metrics(equity, trades, total_invested)
+    equity_curve = [
+        EquityPoint(date=dt.strftime("%Y-%m-%d"), value=round(float(v), 2))
+        for dt, v in equity.items()
+    ]
+    return BacktestResponse(
+        symbol=symbol.upper(),
+        security_name=security_name,
+        strategy=strategy_cfg.strategy.value,
+        date_from=date_from,
+        date_to=date_to,
+        initial_capital=initial_capital,
+        total_invested=round(total_invested, 2),
+        final_value=round(float(equity.iloc[-1]), 2),
+        equity_curve=equity_curve,
+        metrics=metrics,
+        trades=trades,
+    )
+
+
+def run_compare(request: CompareRequest) -> CompareResponse:
+    """Fetch prices once, run each strategy, return all results."""
+    prices = _fetch_prices(request.symbol, request.date_from, request.date_to)
+    security_name = _fetch_security_name(request.symbol, request.date_from, request.date_to)
+
+    if prices.empty or len(prices) < 2:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=422,
+            detail="Not enough price data in the selected date range.",
+        )
+
+    results = [
+        _run_single_strategy(
+            cfg, prices, request.initial_capital,
+            request.symbol, security_name,
+            request.date_from, request.date_to,
+        )
+        for cfg in request.strategies
+    ]
+
+    return CompareResponse(
+        symbol=request.symbol.upper(),
+        security_name=security_name,
+        date_from=request.date_from,
+        date_to=request.date_to,
+        initial_capital=request.initial_capital,
+        results=results,
     )

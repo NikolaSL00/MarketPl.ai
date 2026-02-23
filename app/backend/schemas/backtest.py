@@ -132,3 +132,33 @@ class SymbolDateRangeResponse(BaseModel):
     min_date: str
     max_date: str
     data_points: int
+
+
+# ── Compare shapes ───────────────────────────────────────────────────────────
+
+class StrategyConfig(BaseModel):
+    """One strategy entry in a compare request."""
+    strategy: StrategyType
+    strategy_params: Optional[dict] = Field(default=None)
+
+
+class CompareRequest(BaseModel):
+    """Request to run multiple strategies on the same dataset."""
+    symbol: str = Field(description="Stock/ETF ticker symbol", examples=["AAPL"])
+    date_from: str = Field(description="Start date YYYY-MM-DD")
+    date_to: str = Field(description="End date YYYY-MM-DD")
+    initial_capital: float = Field(gt=0, description="Starting capital in USD")
+    strategies: List[StrategyConfig] = Field(
+        min_length=2, max_length=3,
+        description="2 or 3 strategies to compare",
+    )
+
+
+class CompareResponse(BaseModel):
+    """Multi-strategy comparison result."""
+    symbol: str
+    security_name: Optional[str] = None
+    date_from: str
+    date_to: str
+    initial_capital: float
+    results: List[BacktestResponse]

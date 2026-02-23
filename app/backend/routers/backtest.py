@@ -9,6 +9,8 @@ from database import stock_prices_collection
 from schemas.backtest import (
     BacktestRequest,
     BacktestResponse,
+    CompareRequest,
+    CompareResponse,
     DCAParams,
     MACrossoverParams,
     StrategyType,
@@ -69,6 +71,42 @@ def run_backtest(request: BacktestRequest):
 
     # Run the simulation
     return backtest_engine.run_backtest(request)
+
+
+@router.post("/compare", response_model=CompareResponse)
+def run_compare(request: CompareRequest):
+    """Run multiple strategies on the same dataset and return compared results."""
+    # Validate dates
+    try:
+        date_from = datetime.fromisoformat(request.date_from)
+        date_to = datetime.fromisoformat(request.date_to)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    if date_from >= date_to:
+        raise HTTPException(status_code=422, detail="date_from must be before date_to.")
+
+    if len(request.strategies) < 2:
+        raise HTTPException(status_code=422, detail="At least 2 strategies required for comparison.")
+
+    # Validate symbol exists
+    count = stock_prices_collection.count_documents({"symbol": request.symbol.upper()})
+    if count == 0:
+        raise HTTPException(status_code=404, detail=f"No data found for symbol '{request.symbol}'.")
+
+    # Validate each strategy's params
+    for cfg in request.strategies:
+        bare = BacktestRequest(
+            symbol=request.symbol,
+            date_from=request.date_from,
+            date_to=request.date_to,
+            initial_capital=request.initial_capital,
+            strategy=cfg.strategy,
+            strategy_params=cfg.strategy_params,
+        )
+        _validate_strategy_params(bare)
+
+    return backtest_engine.run_compare(request)
 
 
 @router.get(
