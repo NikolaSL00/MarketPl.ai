@@ -3,6 +3,7 @@ import { useLocation } from "react-router"
 const pageTitles: Record<string, string> = {
   "/import": "Import",
   "/data": "Data Explorer",
+  "/backtest": "Backtest",
 }
 
 export function Header() {

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import ensure_indexes, cleanup_orphaned_prices, mongo_client
-from routers import imports, stock_prices
+from routers import imports, stock_prices, backtest
 
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ app.add_middleware(
 # Mount routers
 app.include_router(imports.router)
 app.include_router(stock_prices.router)
+app.include_router(backtest.router)
 
 
 @app.get("/health")

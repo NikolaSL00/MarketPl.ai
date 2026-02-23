@@ -1,5 +1,6 @@
 import type { ImportStatusResponse, ImportListResponse } from '@/types/import'
 import type { StockPricePageResponse, SymbolListResponse } from '@/types/stock-price'
+import type { BacktestRequest, BacktestResponse, SymbolDateRange } from '@/types/backtest'
 
 const API_BASE = '/api'
 
@@ -61,4 +62,14 @@ export const api = {
   },
 
   getSymbols: () => request<SymbolListResponse>('/stock-prices/symbols'),
+
+  // Backtest
+  getSymbolDateRange: (symbol: string) =>
+    request<SymbolDateRange>(`/backtest/symbols/${encodeURIComponent(symbol)}/date-range`),
+
+  runBacktest: (payload: BacktestRequest) =>
+    request<BacktestResponse>('/backtest', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 }
