@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "csv-processor": {
+      "source": "curiouslearner/devkit",
+      "sourceType": "github",
+      "computedHash": "4720613a8e604307c8dfc3b3881a77c4c6d9ae2ea14ab39158054cb99e402ebf"
+    },
+    "python-backend": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "3e05cfe0d22005cd76126b0a7d67e1b33da8a08da99d863133a37abfd47365a0"
+    },
+    "react-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "9e3995830a55f2b0a403a227a5616160c4d90ddc6eaa8eeb0ce0eefb9dfc5377"
+    }
+  }
+}
