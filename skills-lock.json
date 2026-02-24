@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "4720613a8e604307c8dfc3b3881a77c4c6d9ae2ea14ab39158054cb99e402ebf"
     },
+    "docx": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "8e582fc228f15d80126e2e10be07304b7c320f398d2cf529339642a8a06ebfdf"
+    },
     "python-backend": {
       "source": "jiatastic/open-python-skills",
       "sourceType": "github",
