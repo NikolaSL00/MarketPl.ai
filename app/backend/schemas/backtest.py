@@ -11,6 +11,8 @@ class StrategyType(str, Enum):
     buy_and_hold = "buy_and_hold"
     dca = "dca"
     ma_crossover = "ma_crossover"
+    rsi = "rsi"
+    bollinger_bands = "bollinger_bands"
 
 
 class BuyAndHoldParams(BaseModel):
@@ -50,6 +52,44 @@ class MACrossoverParams(BaseModel):
         ge=20,
         le=500,
         description="Long-term moving average window (days)",
+    )
+
+
+class RSIParams(BaseModel):
+    """RSI momentum / mean-reversion parameters."""
+    rsi_period: int = Field(
+        default=14,
+        ge=2,
+        le=100,
+        description="Lookback period for RSI calculation (days)",
+    )
+    oversold: float = Field(
+        default=30.0,
+        ge=5.0,
+        le=49.0,
+        description="RSI level below which the asset is considered oversold → BUY signal",
+    )
+    overbought: float = Field(
+        default=70.0,
+        ge=51.0,
+        le=95.0,
+        description="RSI level above which the asset is considered overbought → SELL signal",
+    )
+
+
+class BollingerBandsParams(BaseModel):
+    """Bollinger Bands mean-reversion parameters."""
+    bb_window: int = Field(
+        default=20,
+        ge=5,
+        le=200,
+        description="Rolling window for band calculation (days)",
+    )
+    bb_std: float = Field(
+        default=2.0,
+        ge=0.5,
+        le=4.0,
+        description="Number of standard deviations for the upper/lower bands",
     )
 
 
@@ -106,6 +146,10 @@ class PerformanceMetrics(BaseModel):
     sharpe_ratio: float        # Annualised Sharpe (rf = 0)
     max_drawdown: float        # Most negative drawdown fraction, e.g. -0.32
     volatility: float          # Annualised daily-return std dev
+    calmar_ratio: float        # CAGR / |max_drawdown| — return per unit of worst pain
+    best_year: Optional[float] # Highest single-calendar-year return
+    worst_year: Optional[float]# Lowest single-calendar-year return
+    recovery_days: Optional[int] # Days from max-drawdown trough to full recovery (None if not yet)
     win_rate: Optional[float]  # Fraction of profitable closed trades (None for B&H)
     profit_factor: Optional[float]  # Gross profit / gross loss (None if no losses)
     time_in_market: float      # Fraction of days where shares > 0
@@ -149,8 +193,8 @@ class CompareRequest(BaseModel):
     date_to: str = Field(description="End date YYYY-MM-DD")
     initial_capital: float = Field(gt=0, description="Starting capital in USD")
     strategies: List[StrategyConfig] = Field(
-        min_length=2, max_length=3,
-        description="2 or 3 strategies to compare",
+        min_length=2, max_length=5,
+        description="2 to 5 strategies to compare",
     )
 
 
@@ -162,3 +206,60 @@ class CompareResponse(BaseModel):
     date_to: str
     initial_capital: float
     results: List[BacktestResponse]
+
+
+# ── Portfolio shapes ──────────────────────────────────────────────────────────
+
+class RebalanceInterval(str, Enum):
+    monthly = "monthly"
+    quarterly = "quarterly"
+
+
+class PortfolioHolding(BaseModel):
+    """One symbol plus its weight in the portfolio."""
+    symbol: str = Field(description="Ticker symbol, e.g. AAPL")
+    weight: float = Field(gt=0.0, le=1.0, description="Allocation weight as a fraction, e.g. 0.6 = 60%")
+
+
+class PortfolioBacktestRequest(BaseModel):
+    holdings: List[PortfolioHolding] = Field(
+        min_length=2, max_length=5,
+        description="2–5 portfolio holdings with weights that must sum to 1.0 (±0.01 tolerance)",
+    )
+    date_from: str = Field(description="Start date YYYY-MM-DD")
+    date_to: str = Field(description="End date YYYY-MM-DD")
+    initial_capital: float = Field(gt=0, description="Total portfolio starting capital in USD")
+    strategy: StrategyType = Field(description="Strategy applied uniformly to all holdings")
+    strategy_params: Optional[dict] = Field(default=None, description="Strategy-specific parameters")
+    rebalance: bool = Field(default=False, description="Whether to periodically rebalance to target weights")
+    rebalance_interval: Optional[RebalanceInterval] = Field(
+        default=None,
+        description="Rebalance frequency; required when rebalance=True",
+    )
+
+
+class PortfolioHoldingResult(BaseModel):
+    """Backtest result for a single holding within the portfolio."""
+    symbol: str
+    security_name: Optional[str] = None
+    weight: float
+    allocated_capital: float
+    final_value: float
+    total_invested: float
+    equity_curve: List[EquityPoint]
+    metrics: PerformanceMetrics
+
+
+class PortfolioBacktestResponse(BaseModel):
+    """Full portfolio backtest result."""
+    date_from: str
+    date_to: str
+    initial_capital: float
+    strategy: str
+    rebalance: bool
+    rebalance_interval: Optional[str] = None
+    portfolio_equity_curve: List[EquityPoint]
+    portfolio_metrics: PerformanceMetrics
+    portfolio_final_value: float
+    portfolio_total_invested: float
+    holdings: List[PortfolioHoldingResult]

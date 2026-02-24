@@ -90,7 +90,11 @@ export function BacktestResults({ result }: BacktestResultsProps) {
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--foreground-muted)]">
           Performance &amp; Risk Metrics
         </h3>
-        <MetricsGrid metrics={result.metrics} />
+        <MetricsGrid
+          metrics={result.metrics}
+          finalValue={result.final_value}
+          totalInvested={result.total_invested}
+        />
       </section>
 
       <Separator />

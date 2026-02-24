@@ -1,13 +1,14 @@
 import { useState } from "react"
 import { NavLink } from "react-router"
-import { Upload, Database, LineChart, ChevronLeft, ChevronRight } from "lucide-react"
+import { Upload, Database, ChevronLeft, ChevronRight, PieChart, BarChart2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Header } from "./Header"
 
 const navItems = [
   { to: "/import", label: "Import", icon: Upload },
   { to: "/data", label: "Data Explorer", icon: Database },
-  { to: "/backtest", label: "Backtest", icon: LineChart },
+  { to: "/backtest", label: "Backtest", icon: BarChart2 },
+  { to: "/portfolio", label: "Portfolio", icon: PieChart },
 ] as const
 
 export function AppShell({ children }: { children: React.ReactNode }) {

@@ -1,5 +1,6 @@
 import { STRATEGY_OPTIONS, type StrategyType } from '@/types/backtest'
 import { cn } from '@/lib/utils'
+import { StrategyTooltip } from '@/components/ui/GlossaryTooltip'
 
 interface StrategySelectorProps {
   value: StrategyType
@@ -23,14 +24,19 @@ export function StrategySelector({ value, onChange }: StrategySelectorProps) {
                 : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-hover)]'
             )}
           >
-            <span
-              className={cn(
-                'text-sm font-semibold',
-                isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
-              )}
-            >
-              {option.label}
-            </span>
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={cn(
+                  'text-sm font-semibold',
+                  isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
+                )}
+              >
+                {option.label}
+              </span>
+              <span onClick={(e) => e.stopPropagation()}>
+                <StrategyTooltip strategyKey={option.type} />
+              </span>
+            </div>
             <span className="text-xs text-[var(--foreground-muted)] leading-relaxed">
               {option.description}
             </span>

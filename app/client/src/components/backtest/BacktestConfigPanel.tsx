@@ -31,6 +31,10 @@ export function BacktestConfigPanel({ config }: BacktestConfigPanelProps) {
     setDCAParams,
     maParams,
     setMAParams,
+    rsiParams,
+    setRSIParams,
+    bbParams,
+    setBBParams,
     isValid,
     isSubmitting,
     submitError,
@@ -145,8 +149,12 @@ export function BacktestConfigPanel({ config }: BacktestConfigPanelProps) {
           dateTo={dateTo}
           dcaParams={dcaParams}
           maParams={maParams}
+          rsiParams={rsiParams}
+          bbParams={bbParams}
           onDCAChange={setDCAParams}
           onMAChange={setMAParams}
+          onRSIChange={setRSIParams}
+          onBBChange={setBBParams}
         />
       </section>
 

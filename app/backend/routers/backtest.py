@@ -9,10 +9,14 @@ from database import stock_prices_collection
 from schemas.backtest import (
     BacktestRequest,
     BacktestResponse,
+    BollingerBandsParams,
     CompareRequest,
     CompareResponse,
     DCAParams,
     MACrossoverParams,
+    PortfolioBacktestRequest,
+    PortfolioBacktestResponse,
+    RSIParams,
     StrategyType,
     SymbolDateRangeResponse,
 )
@@ -107,6 +111,59 @@ def run_compare(request: CompareRequest):
         _validate_strategy_params(bare)
 
     return backtest_engine.run_compare(request)
+
+
+@router.post("/portfolio", response_model=PortfolioBacktestResponse)
+def run_portfolio_backtest(request: PortfolioBacktestRequest):
+    """Run a multi-symbol portfolio backtest with optional rebalancing."""
+    from datetime import datetime
+
+    # Validate dates
+    try:
+        date_from = datetime.fromisoformat(request.date_from)
+        date_to = datetime.fromisoformat(request.date_to)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    if date_from >= date_to:
+        raise HTTPException(status_code=422, detail="date_from must be before date_to.")
+
+    # Validate weights sum to ~1.0
+    total_weight = sum(h.weight for h in request.holdings)
+    if abs(total_weight - 1.0) > 0.01:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Holdings weights must sum to 1.0 (got {total_weight:.4f}).",
+        )
+
+    # Validate rebalance config
+    if request.rebalance and not request.rebalance_interval:
+        raise HTTPException(
+            status_code=422,
+            detail="rebalance_interval is required when rebalance=True.",
+        )
+
+    # Validate all symbols exist
+    for h in request.holdings:
+        count = stock_prices_collection.count_documents({"symbol": h.symbol.upper()})
+        if count == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data found for symbol '{h.symbol.upper()}'.",
+            )
+
+    # Validate strategy params (reuse existing helper)
+    bare = BacktestRequest(
+        symbol=request.holdings[0].symbol,
+        date_from=request.date_from,
+        date_to=request.date_to,
+        initial_capital=request.initial_capital,
+        strategy=request.strategy,
+        strategy_params=request.strategy_params,
+    )
+    _validate_strategy_params(bare)
+
+    return backtest_engine.run_portfolio_backtest(request)
 
 
 @router.get(

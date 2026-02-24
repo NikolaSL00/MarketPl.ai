@@ -21,6 +21,7 @@ from database import stock_prices_collection
 from schemas.backtest import (
     BacktestRequest,
     BacktestResponse,
+    BollingerBandsParams,
     CompareRequest,
     CompareResponse,
     DCAInterval,
@@ -28,6 +29,7 @@ from schemas.backtest import (
     EquityPoint,
     MACrossoverParams,
     PerformanceMetrics,
+    RSIParams,
     StrategyConfig,
     StrategyType,
     TradeRecord,
@@ -183,12 +185,46 @@ def _compute_metrics(
         win_rate = wins / total_closed
         profit_factor = (gross_profit / gross_loss) if gross_loss > 1e-9 else None
 
+    # Calmar Ratio: CAGR / |max_drawdown|
+    calmar_ratio = (cagr / abs(max_drawdown)) if abs(max_drawdown) > 1e-9 else 0.0
+
+    # Best / Worst calendar-year return
+    best_year: Optional[float] = None
+    worst_year: Optional[float] = None
+    try:
+        yearly = equity.resample("YE").last()
+        if len(yearly) >= 2:
+            ann_rets = yearly.pct_change().dropna()
+            if len(ann_rets) > 0:
+                best_year = float(ann_rets.max())
+                worst_year = float(ann_rets.min())
+    except Exception:
+        pass
+
+    # Recovery days: days from trough of max drawdown until equity returns to pre-trough peak
+    recovery_days: Optional[int] = None
+    try:
+        running_peak = equity.cummax()
+        drawdown_series = (equity - running_peak) / running_peak
+        trough_date = drawdown_series.idxmin()
+        peak_at_trough = float(running_peak[trough_date])
+        post_trough = equity[trough_date:]
+        recovered = post_trough[post_trough >= peak_at_trough * (1 - 1e-9)]
+        if len(recovered) > 0:
+            recovery_days = (recovered.index[0] - trough_date).days
+    except Exception:
+        pass
+
     return PerformanceMetrics(
         total_return=total_return,
         cagr=cagr,
         sharpe_ratio=sharpe_ratio,
         max_drawdown=max_drawdown,
         volatility=volatility,
+        calmar_ratio=calmar_ratio,
+        best_year=best_year,
+        worst_year=worst_year,
+        recovery_days=recovery_days,
         win_rate=win_rate,
         profit_factor=profit_factor,
         time_in_market=time_in_market,
@@ -344,6 +380,147 @@ def _run_ma_crossover(
     return equity, trades
 
 
+# ── RSI strategy ──────────────────────────────────────────────────────────────
+
+def _compute_rsi(prices: pd.Series, period: int) -> pd.Series:
+    """Wilder's RSI using EMA with alpha=1/period (adjust=False)."""
+    delta = prices.diff()
+    gain = delta.clip(lower=0.0)
+    loss = (-delta).clip(lower=0.0)
+    avg_gain = gain.ewm(alpha=1.0 / period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1.0 / period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _run_rsi(
+    prices: pd.DataFrame,
+    initial_capital: float,
+    params: RSIParams,
+) -> Tuple[pd.Series, List[TradeRecord]]:
+    """
+    RSI Mean-Reversion strategy.
+    BUY (all-in) the first bar the RSI drops below the oversold threshold.
+    SELL (all-out) the first bar the RSI rises above the overbought threshold.
+    No look-ahead: signal and execution share the same close.
+    """
+    adj = prices["adj_close"]
+    rsi_series = _compute_rsi(adj, params.rsi_period)
+
+    cash = initial_capital
+    shares = 0.0
+    in_market = False
+    trades: List[TradeRecord] = []
+    equity_values: List[float] = []
+
+    for i, (dt, price) in enumerate(adj.items()):
+        price_f = float(price)
+        curr_rsi = rsi_series.iloc[i]
+
+        if not math.isnan(curr_rsi):
+            # Enter: RSI drops below oversold → all-in
+            if not in_market and curr_rsi < params.oversold and cash > 0:
+                new_shares = cash / price_f
+                shares += new_shares
+                cash = 0.0
+                in_market = True
+                trades.append(TradeRecord(
+                    date=dt.strftime("%Y-%m-%d"),
+                    action="BUY",
+                    price=price_f,
+                    shares=new_shares,
+                    cash_after=cash,
+                    portfolio_value=shares * price_f,
+                ))
+            # Exit: RSI rises above overbought → all-out
+            elif in_market and curr_rsi > params.overbought and shares > 0:
+                proceeds = shares * price_f
+                old_shares = shares
+                cash += proceeds
+                shares = 0.0
+                in_market = False
+                trades.append(TradeRecord(
+                    date=dt.strftime("%Y-%m-%d"),
+                    action="SELL",
+                    price=price_f,
+                    shares=old_shares,
+                    cash_after=cash,
+                    portfolio_value=cash,
+                ))
+
+        equity_values.append(cash + shares * price_f)
+
+    equity = pd.Series(equity_values, index=adj.index, dtype=float)
+    return equity, trades
+
+
+# ── Bollinger Bands strategy ──────────────────────────────────────────────────
+
+def _run_bollinger_bands(
+    prices: pd.DataFrame,
+    initial_capital: float,
+    params: BollingerBandsParams,
+) -> Tuple[pd.Series, List[TradeRecord]]:
+    """
+    Bollinger Bands mean-reversion strategy.
+    BUY (all-in) when the close drops below the lower band (μ − k·σ).
+    SELL (all-out) when the close rises above the upper band (μ + k·σ).
+    Execution at the signal bar's close — no look-ahead.
+    """
+    adj = prices["adj_close"]
+    sma = adj.rolling(params.bb_window).mean()
+    std = adj.rolling(params.bb_window).std()
+    upper = sma + params.bb_std * std
+    lower = sma - params.bb_std * std
+
+    cash = initial_capital
+    shares = 0.0
+    in_market = False
+    trades: List[TradeRecord] = []
+    equity_values: List[float] = []
+
+    for i, (dt, price) in enumerate(adj.items()):
+        price_f = float(price)
+        u = upper.iloc[i]
+        l = lower.iloc[i]
+
+        if not (math.isnan(u) or math.isnan(l)):
+            # Enter: price closes below lower band → oversold, mean-reversion entry
+            if not in_market and price_f < l and cash > 0:
+                new_shares = cash / price_f
+                shares += new_shares
+                cash = 0.0
+                in_market = True
+                trades.append(TradeRecord(
+                    date=dt.strftime("%Y-%m-%d"),
+                    action="BUY",
+                    price=price_f,
+                    shares=new_shares,
+                    cash_after=cash,
+                    portfolio_value=shares * price_f,
+                ))
+            # Exit: price closes above upper band → overbought, take profit
+            elif in_market and price_f > u and shares > 0:
+                proceeds = shares * price_f
+                old_shares = shares
+                cash += proceeds
+                shares = 0.0
+                in_market = False
+                trades.append(TradeRecord(
+                    date=dt.strftime("%Y-%m-%d"),
+                    action="SELL",
+                    price=price_f,
+                    shares=old_shares,
+                    cash_after=cash,
+                    portfolio_value=cash,
+                ))
+
+        equity_values.append(cash + shares * price_f)
+
+    equity = pd.Series(equity_values, index=adj.index, dtype=float)
+    return equity, trades
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
 
 def run_backtest(request: BacktestRequest) -> BacktestResponse:
@@ -381,6 +558,32 @@ def run_backtest(request: BacktestRequest) -> BacktestResponse:
                 ),
             )
         equity, trades = _run_ma_crossover(prices, request.initial_capital, ma_p)
+
+    elif request.strategy == StrategyType.rsi:
+        rsi_p = RSIParams(**params)
+        if len(prices) < rsi_p.rsi_period * 3:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Not enough data for RSI-{rsi_p.rsi_period}. "
+                    f"Only {len(prices)} data points available."
+                ),
+            )
+        equity, trades = _run_rsi(prices, request.initial_capital, rsi_p)
+
+    elif request.strategy == StrategyType.bollinger_bands:
+        bb_p = BollingerBandsParams(**params)
+        if len(prices) < bb_p.bb_window * 2:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Not enough data for Bollinger Bands with window {bb_p.bb_window}. "
+                    f"Only {len(prices)} data points available."
+                ),
+            )
+        equity, trades = _run_bollinger_bands(prices, request.initial_capital, bb_p)
 
     else:
         from fastapi import HTTPException
@@ -431,6 +634,14 @@ def _run_single_strategy(
     elif strategy_cfg.strategy == StrategyType.ma_crossover:
         ma_p = MACrossoverParams(**params)
         equity, trades = _run_ma_crossover(prices, initial_capital, ma_p)
+
+    elif strategy_cfg.strategy == StrategyType.rsi:
+        rsi_p = RSIParams(**params)
+        equity, trades = _run_rsi(prices, initial_capital, rsi_p)
+
+    elif strategy_cfg.strategy == StrategyType.bollinger_bands:
+        bb_p = BollingerBandsParams(**params)
+        equity, trades = _run_bollinger_bands(prices, initial_capital, bb_p)
 
     else:
         from fastapi import HTTPException
@@ -484,4 +695,226 @@ def run_compare(request: CompareRequest) -> CompareResponse:
         date_to=request.date_to,
         initial_capital=request.initial_capital,
         results=results,
+    )
+
+
+def run_portfolio_backtest(request) -> "PortfolioBacktestResponse":
+    """
+    Run a multi-symbol portfolio backtest.
+
+    Steps:
+    1. Fetch price data for all holdings.
+    2. Restrict to the strict date intersection across all symbols.
+    3. For each period (single period if no rebalancing; one period per rebalance boundary otherwise):
+       a. Allocate capital proportionally by weight.
+       b. Run the strategy for that sub-period.
+       c. Collect equity curves and trades.
+    4. Sum holding equity curves to produce portfolio equity curve.
+    5. Compute portfolio-level metrics from the summed curve.
+    6. Return PortfolioBacktestResponse.
+    """
+    from schemas.backtest import (
+        PortfolioBacktestResponse, PortfolioHoldingResult,
+        StrategyConfig, StrategyType, DCAParams, MACrossoverParams,
+        RSIParams, BollingerBandsParams, DCAInterval, EquityPoint
+    )
+    from fastapi import HTTPException
+
+    date_from = request.date_from
+    date_to = request.date_to
+    initial_capital = request.initial_capital
+    strategy = request.strategy
+    params = request.strategy_params or {}
+
+    # Fetch all price data
+    all_prices: dict[str, pd.DataFrame] = {}
+    security_names: dict[str, Optional[str]] = {}
+    for h in request.holdings:
+        sym = h.symbol.upper()
+        df = _fetch_prices(sym, date_from, date_to)
+        if df.empty or len(df) < 2:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Not enough price data for symbol '{sym}' in the selected date range.",
+            )
+        all_prices[sym] = df
+        security_names[sym] = _fetch_security_name(sym, date_from, date_to)
+
+    # Compute strict date intersection
+    common_index = None
+    for df in all_prices.values():
+        idx = df.index
+        if common_index is None:
+            common_index = idx
+        else:
+            common_index = common_index.intersection(idx)
+
+    if common_index is None or len(common_index) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="Not enough overlapping trading days across the selected symbols.",
+        )
+
+    # Restrict all price series to common dates
+    for sym in all_prices:
+        all_prices[sym] = all_prices[sym].loc[common_index]
+
+    # Determine actual date range after intersection
+    actual_from = common_index[0].strftime("%Y-%m-%d")
+    actual_to = common_index[-1].strftime("%Y-%m-%d")
+
+    # ── Run strategies ─────────────────────────────────────────────────────────
+    def run_one_holding(sym: str, prices_df: pd.DataFrame, capital: float) -> tuple:
+        """Returns (equity_series, trades, total_invested_for_holding)."""
+        total_inv = capital
+        if strategy == StrategyType.buy_and_hold:
+            eq, tr = _run_buy_and_hold(prices_df, capital)
+        elif strategy == StrategyType.dca:
+            dca_p = DCAParams(**params)
+            eq, tr, total_inv = _run_dca(prices_df, dca_p)
+        elif strategy == StrategyType.ma_crossover:
+            ma_p = MACrossoverParams(**params)
+            eq, tr = _run_ma_crossover(prices_df, capital, ma_p)
+        elif strategy == StrategyType.rsi:
+            rsi_p = RSIParams(**params)
+            eq, tr = _run_rsi(prices_df, capital, rsi_p)
+        elif strategy == StrategyType.bollinger_bands:
+            bb_p = BollingerBandsParams(**params)
+            eq, tr = _run_bollinger_bands(prices_df, capital, bb_p)
+        else:
+            raise HTTPException(status_code=400, detail="Unknown strategy.")
+        return eq, tr, total_inv
+
+    # ── No rebalancing case ────────────────────────────────────────────────────
+    if not request.rebalance:
+        holding_equities: dict[str, pd.Series] = {}
+        holding_trades: dict[str, list] = {}
+        holding_total_invested: dict[str, float] = {}
+
+        for h in request.holdings:
+            sym = h.symbol.upper()
+            allocated = initial_capital * h.weight
+            eq, tr, ti = run_one_holding(sym, all_prices[sym], allocated)
+            holding_equities[sym] = eq
+            holding_trades[sym] = tr
+            holding_total_invested[sym] = ti
+
+        portfolio_equity = sum(holding_equities.values())
+
+    # ── Rebalancing case ───────────────────────────────────────────────────────
+    else:
+        interval = request.rebalance_interval
+        if interval is None:
+            interval_str = "monthly"
+        else:
+            interval_str = interval.value if hasattr(interval, "value") else str(interval)
+
+        freq = "MS" if interval_str == "monthly" else "QS"
+
+        period_starts = pd.date_range(
+            start=common_index[0],
+            end=common_index[-1],
+            freq=freq,
+        )
+        period_starts = period_starts.union([common_index[0]])
+        period_starts = period_starts[period_starts <= common_index[-1]]
+
+        boundaries = sorted(set(period_starts.tolist() + [common_index[-1] + pd.Timedelta(days=1)]))
+
+        holding_equities_parts: dict[str, list] = {h.symbol.upper(): [] for h in request.holdings}
+        holding_trades_all: dict[str, list] = {h.symbol.upper(): [] for h in request.holdings}
+        holding_total_invested_acc: dict[str, float] = {h.symbol.upper(): 0.0 for h in request.holdings}
+
+        current_capital: dict[str, float] = {
+            h.symbol.upper(): initial_capital * h.weight for h in request.holdings
+        }
+
+        for period_idx in range(len(boundaries) - 1):
+            period_start = boundaries[period_idx]
+            period_end = boundaries[period_idx + 1] - pd.Timedelta(days=1)
+
+            mask = (common_index >= period_start) & (common_index <= period_end)
+            sub_index = common_index[mask]
+            if len(sub_index) < 1:
+                continue
+
+            sub_prices: dict[str, pd.DataFrame] = {
+                sym: all_prices[sym].loc[sub_index] for sym in all_prices
+            }
+
+            if period_idx > 0:
+                total_value = sum(current_capital.values())
+                for h in request.holdings:
+                    sym = h.symbol.upper()
+                    current_capital[sym] = total_value * h.weight
+
+            for h in request.holdings:
+                sym = h.symbol.upper()
+                if len(sub_prices[sym]) < 1:
+                    continue
+                eq, tr, ti = run_one_holding(sym, sub_prices[sym], current_capital[sym])
+                holding_equities_parts[sym].append(eq)
+                holding_trades_all[sym].extend(tr)
+                holding_total_invested_acc[sym] += ti
+                current_capital[sym] = float(eq.iloc[-1])
+
+        holding_equities = {}
+        holding_trades = {}
+        holding_total_invested = {}
+        for h in request.holdings:
+            sym = h.symbol.upper()
+            parts = holding_equities_parts[sym]
+            if parts:
+                holding_equities[sym] = pd.concat(parts)
+            else:
+                holding_equities[sym] = pd.Series(
+                    [initial_capital * h.weight] * len(common_index),
+                    index=common_index,
+                )
+            holding_trades[sym] = holding_trades_all[sym]
+            holding_total_invested[sym] = holding_total_invested_acc[sym]
+
+        portfolio_equity = sum(holding_equities.values())
+
+    # ── Build results ──────────────────────────────────────────────────────────
+    portfolio_total_invested = sum(holding_total_invested.values())
+    portfolio_metrics = _compute_metrics(portfolio_equity, [], portfolio_total_invested)
+
+    portfolio_equity_curve = [
+        EquityPoint(date=dt.strftime("%Y-%m-%d"), value=round(float(v), 2))
+        for dt, v in portfolio_equity.items()
+    ]
+
+    holding_results = []
+    for h in request.holdings:
+        sym = h.symbol.upper()
+        eq = holding_equities[sym]
+        h_metrics = _compute_metrics(eq, holding_trades[sym], holding_total_invested[sym])
+        h_equity_curve = [
+            EquityPoint(date=dt.strftime("%Y-%m-%d"), value=round(float(v), 2))
+            for dt, v in eq.items()
+        ]
+        holding_results.append(PortfolioHoldingResult(
+            symbol=sym,
+            security_name=security_names[sym],
+            weight=h.weight,
+            allocated_capital=round(initial_capital * h.weight, 2),
+            final_value=round(float(eq.iloc[-1]), 2),
+            total_invested=round(holding_total_invested[sym], 2),
+            equity_curve=h_equity_curve,
+            metrics=h_metrics,
+        ))
+
+    return PortfolioBacktestResponse(
+        date_from=actual_from,
+        date_to=actual_to,
+        initial_capital=initial_capital,
+        strategy=strategy.value if hasattr(strategy, "value") else str(strategy),
+        rebalance=request.rebalance,
+        rebalance_interval=request.rebalance_interval.value if request.rebalance_interval else None,
+        portfolio_equity_curve=portfolio_equity_curve,
+        portfolio_metrics=portfolio_metrics,
+        portfolio_final_value=round(float(portfolio_equity.iloc[-1]), 2),
+        portfolio_total_invested=round(portfolio_total_invested, 2),
+        holdings=holding_results,
     )

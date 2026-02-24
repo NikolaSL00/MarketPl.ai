@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator'
 import { Loader2, GitCompareArrows } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STRATEGY_OPTIONS, STRATEGY_COLORS, type StrategyType } from '@/types/backtest'
+import { StrategyTooltip } from '@/components/ui/GlossaryTooltip'
 import type { UseCompareConfigReturn } from '@/hooks/useCompareConfig'
 
 interface CompareConfigPanelProps {
@@ -21,6 +22,8 @@ export function CompareConfigPanel({ config }: CompareConfigPanelProps) {
     selectedStrategies, toggleStrategy,
     dcaParams, setDCAParams,
     maParams, setMAParams,
+    rsiParams, setRSIParams,
+    bbParams, setBBParams,
     isValid, validationErrors,
     isSubmitting, submitError,
     submit,
@@ -145,12 +148,17 @@ export function CompareConfigPanel({ config }: CompareConfigPanelProps) {
                     )}
                   </span>
                   <div className="min-w-0">
-                    <span
-                      className="block text-sm font-semibold"
-                      style={active ? { color } : undefined}
-                    >
-                      {option.label}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span
+                        className="text-sm font-semibold"
+                        style={active ? { color } : undefined}
+                      >
+                        {option.label}
+                      </span>
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <StrategyTooltip strategyKey={option.type} />
+                      </span>
+                    </div>
                     <span className="block text-xs text-[var(--foreground-muted)] leading-relaxed">
                       {option.description}
                     </span>
@@ -158,7 +166,12 @@ export function CompareConfigPanel({ config }: CompareConfigPanelProps) {
                 </button>
 
                 {/* Strategy-specific params shown when selected */}
-                {active && (option.type === 'dca' || option.type === 'ma_crossover') && (
+                {active && (
+                  option.type === 'dca' ||
+                  option.type === 'ma_crossover' ||
+                  option.type === 'rsi' ||
+                  option.type === 'bollinger_bands'
+                ) && (
                   <div className="ml-7 mt-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3">
                     <StrategyParamsForm
                       strategy={option.type as StrategyType}
@@ -166,8 +179,12 @@ export function CompareConfigPanel({ config }: CompareConfigPanelProps) {
                       dateTo={dateTo}
                       dcaParams={dcaParams}
                       maParams={maParams}
+                      rsiParams={rsiParams}
+                      bbParams={bbParams}
                       onDCAChange={setDCAParams}
                       onMAChange={setMAParams}
+                      onRSIChange={setRSIParams}
+                      onBBChange={setBBParams}
                     />
                   </div>
                 )}

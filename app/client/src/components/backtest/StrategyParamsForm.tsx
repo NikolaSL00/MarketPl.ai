@@ -5,6 +5,8 @@ import {
   type DCAInterval,
   type DCAParams,
   type MACrossoverParams,
+  type RSIParams,
+  type BollingerBandsParams,
   type StrategyType,
 } from '@/types/backtest'
 
@@ -14,8 +16,12 @@ interface StrategyParamsFormProps {
   dateTo: string
   dcaParams: DCAParams
   maParams: MACrossoverParams
+  rsiParams: RSIParams
+  bbParams: BollingerBandsParams
   onDCAChange: (params: DCAParams) => void
   onMAChange: (params: MACrossoverParams) => void
+  onRSIChange: (params: RSIParams) => void
+  onBBChange: (params: BollingerBandsParams) => void
 }
 
 export function StrategyParamsForm({
@@ -24,8 +30,12 @@ export function StrategyParamsForm({
   dateTo,
   dcaParams,
   maParams,
+  rsiParams,
+  bbParams,
   onDCAChange,
   onMAChange,
+  onRSIChange,
+  onBBChange,
 }: StrategyParamsFormProps) {
   const parseISODateUTC = (iso: string) => {
     if (!iso) return null
@@ -214,6 +224,127 @@ export function StrategyParamsForm({
             Short window must be less than long window.
           </p>
         )}
+      </div>
+    )
+  }
+
+  if (strategy === 'rsi') {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="mb-1.5 block text-sm text-[var(--foreground-muted)]">
+              RSI Period
+            </label>
+            <Input
+              type="number"
+              min={2}
+              max={50}
+              value={rsiParams.rsi_period}
+              onChange={(e) =>
+                onRSIChange({ ...rsiParams, rsi_period: Number(e.target.value) })
+              }
+              className="font-mono-data text-sm"
+              placeholder="14"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-[var(--foreground-muted)]">
+              Oversold (&lt;)
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={49}
+              value={rsiParams.oversold}
+              onChange={(e) =>
+                onRSIChange({ ...rsiParams, oversold: Number(e.target.value) })
+              }
+              className="font-mono-data text-sm"
+              placeholder="30"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-[var(--foreground-muted)]">
+              Overbought (&gt;)
+            </label>
+            <Input
+              type="number"
+              min={51}
+              max={99}
+              value={rsiParams.overbought}
+              onChange={(e) =>
+                onRSIChange({ ...rsiParams, overbought: Number(e.target.value) })
+              }
+              className="font-mono-data text-sm"
+              placeholder="70"
+            />
+          </div>
+        </div>
+        {rsiParams.oversold >= rsiParams.overbought && (
+          <p className="text-[10px] text-[var(--loss)]">
+            Oversold must be below overbought.
+          </p>
+        )}
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+          <p className="text-xs text-[var(--foreground-muted)]">
+            Signal: RSI({rsiParams.rsi_period}) &lt;&nbsp;
+            <span className="font-mono tabular-nums text-[var(--gain)]">{rsiParams.oversold}</span>
+            &nbsp;→ BUY&nbsp;·&nbsp;RSI &gt;&nbsp;
+            <span className="font-mono tabular-nums text-[var(--loss)]">{rsiParams.overbought}</span>
+            &nbsp;→ SELL
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (strategy === 'bollinger_bands') {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-sm text-[var(--foreground-muted)]">
+              Window (days)
+            </label>
+            <Input
+              type="number"
+              min={5}
+              max={200}
+              value={bbParams.bb_window}
+              onChange={(e) =>
+                onBBChange({ ...bbParams, bb_window: Number(e.target.value) })
+              }
+              className="font-mono-data text-sm"
+              placeholder="20"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-[var(--foreground-muted)]">
+              Std Dev (σ)
+            </label>
+            <Input
+              type="number"
+              min={0.5}
+              max={5}
+              step={0.5}
+              value={bbParams.bb_std}
+              onChange={(e) =>
+                onBBChange({ ...bbParams, bb_std: Number(e.target.value) })
+              }
+              className="font-mono-data text-sm"
+              placeholder="2.0"
+            />
+          </div>
+        </div>
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+          <p className="text-xs text-[var(--foreground-muted)]">
+            Bands: SMA(<span className="font-mono tabular-nums text-[var(--foreground)]">{bbParams.bb_window}</span>)
+            &nbsp;±&nbsp;
+            <span className="font-mono tabular-nums text-[var(--foreground)]">{bbParams.bb_std}</span>σ
+            &nbsp;·&nbsp;close &lt; lower → BUY&nbsp;·&nbsp;close &gt; upper → SELL
+          </p>
+        </div>
       </div>
     )
   }

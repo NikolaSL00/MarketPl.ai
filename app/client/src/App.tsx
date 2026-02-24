@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { ImportPage } from '@/pages/ImportPage'
 import { DataExplorerPage } from '@/pages/DataExplorerPage'
 import { BacktestPage } from '@/pages/BacktestPage'
+import { PortfolioBacktestPage } from '@/pages/PortfolioBacktestPage'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="/import" element={<ImportPage />} />
         <Route path="/data" element={<DataExplorerPage />} />
         <Route path="/backtest" element={<BacktestPage />} />
+        <Route path="/portfolio" element={<PortfolioBacktestPage />} />
       </Routes>
     </AppShell>
   )

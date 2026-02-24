@@ -4,12 +4,19 @@ import type {
   StrategyType,
   DCAParams,
   MACrossoverParams,
+  RSIParams,
+  BollingerBandsParams,
   CompareRequest,
   CompareResponse,
   SymbolDateRange,
   StrategyConfig,
 } from '@/types/backtest'
-import { DEFAULT_DCA_PARAMS, DEFAULT_MA_PARAMS } from '@/types/backtest'
+import {
+  DEFAULT_DCA_PARAMS,
+  DEFAULT_MA_PARAMS,
+  DEFAULT_RSI_PARAMS,
+  DEFAULT_BB_PARAMS,
+} from '@/types/backtest'
 
 export type SelectedStrategies = Set<StrategyType>
 
@@ -39,6 +46,10 @@ export interface UseCompareConfigReturn {
   setDCAParams: (params: DCAParams) => void
   maParams: MACrossoverParams
   setMAParams: (params: MACrossoverParams) => void
+  rsiParams: RSIParams
+  setRSIParams: (params: RSIParams) => void
+  bbParams: BollingerBandsParams
+  setBBParams: (params: BollingerBandsParams) => void
 
   // Validation
   isValid: boolean
@@ -84,6 +95,8 @@ export function useCompareConfig(): UseCompareConfigReturn {
   // Per-strategy params
   const [dcaParams, setDCAParams] = useState<DCAParams>(DEFAULT_DCA_PARAMS)
   const [maParams, setMAParams] = useState<MACrossoverParams>(DEFAULT_MA_PARAMS)
+  const [rsiParams, setRSIParams] = useState<RSIParams>(DEFAULT_RSI_PARAMS)
+  const [bbParams, setBBParams] = useState<BollingerBandsParams>(DEFAULT_BB_PARAMS)
 
   // Submission
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -122,20 +135,22 @@ export function useCompareConfig(): UseCompareConfigReturn {
   useEffect(() => {
     setSubmitResult(null)
     setSubmitError(null)
-  }, [symbol, dateFrom, dateTo, initialCapital, selectedStrategies, dcaParams, maParams])
+  }, [symbol, dateFrom, dateTo, initialCapital, selectedStrategies, dcaParams, maParams, rsiParams, bbParams])
 
-  // Build ordered strategy config list (preserve insertion order via STRATEGY_ORDER)
-  const STRATEGY_ORDER: StrategyType[] = ['buy_and_hold', 'dca', 'ma_crossover']
+  // Build ordered strategy config list
+  const STRATEGY_ORDER: StrategyType[] = ['buy_and_hold', 'dca', 'ma_crossover', 'rsi', 'bollinger_bands']
   const strategyConfigs = useMemo((): StrategyConfig[] =>
     STRATEGY_ORDER
       .filter((s) => selectedStrategies.has(s))
       .map((s): StrategyConfig => {
         if (s === 'dca') return { strategy: s, strategy_params: dcaParams }
         if (s === 'ma_crossover') return { strategy: s, strategy_params: maParams }
+        if (s === 'rsi') return { strategy: s, strategy_params: rsiParams }
+        if (s === 'bollinger_bands') return { strategy: s, strategy_params: bbParams }
         return { strategy: s, strategy_params: null }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedStrategies, dcaParams, maParams]
+    [selectedStrategies, dcaParams, maParams, rsiParams, bbParams]
   )
 
   // Validation
@@ -151,8 +166,10 @@ export function useCompareConfig(): UseCompareConfigReturn {
       errors.push('DCA amount must be greater than 0.')
     if (selectedStrategies.has('ma_crossover') && maParams.short_window >= maParams.long_window)
       errors.push('MA short window must be less than long window.')
+    if (selectedStrategies.has('rsi') && rsiParams.oversold >= rsiParams.overbought)
+      errors.push('RSI oversold must be below overbought threshold.')
     return errors
-  }, [symbol, dateFrom, dateTo, initialCapital, selectedStrategies, dcaParams, maParams])
+  }, [symbol, dateFrom, dateTo, initialCapital, selectedStrategies, dcaParams, maParams, rsiParams, bbParams])
 
   const isValid = validationErrors.length === 0
 
@@ -188,6 +205,8 @@ export function useCompareConfig(): UseCompareConfigReturn {
     selectedStrategies, toggleStrategy,
     dcaParams, setDCAParams,
     maParams, setMAParams,
+    rsiParams, setRSIParams,
+    bbParams, setBBParams,
     isValid, validationErrors,
     isSubmitting, submitError, submitResult,
     submit,

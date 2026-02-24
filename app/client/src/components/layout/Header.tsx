@@ -4,6 +4,7 @@ const pageTitles: Record<string, string> = {
   "/import": "Import",
   "/data": "Data Explorer",
   "/backtest": "Backtest",
+  "/portfolio": "Portfolio Backtest",
 }
 
 export function Header() {

@@ -1,6 +1,6 @@
 import type { ImportStatusResponse, ImportListResponse } from '@/types/import'
 import type { StockPricePageResponse, SymbolListResponse } from '@/types/stock-price'
-import type { BacktestRequest, BacktestResponse, CompareRequest, CompareResponse, SymbolDateRange } from '@/types/backtest'
+import type { BacktestRequest, BacktestResponse, CompareRequest, CompareResponse, SymbolDateRange, PortfolioBacktestRequest, PortfolioBacktestResponse } from '@/types/backtest'
 
 const API_BASE = '/api'
 
@@ -75,6 +75,12 @@ export const api = {
 
   compareBacktest: (payload: CompareRequest) =>
     request<CompareResponse>('/backtest/compare', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  runPortfolioBacktest: (payload: PortfolioBacktestRequest) =>
+    request<PortfolioBacktestResponse>('/backtest/portfolio', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

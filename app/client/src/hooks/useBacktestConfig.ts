@@ -4,12 +4,14 @@ import type {
   StrategyType,
   DCAParams,
   MACrossoverParams,
+  RSIParams,
+  BollingerBandsParams,
   StrategyParams,
   BacktestRequest,
   BacktestResponse,
   SymbolDateRange,
 } from '@/types/backtest'
-import { DEFAULT_DCA_PARAMS, DEFAULT_MA_PARAMS } from '@/types/backtest'
+import { DEFAULT_DCA_PARAMS, DEFAULT_MA_PARAMS, DEFAULT_RSI_PARAMS, DEFAULT_BB_PARAMS } from '@/types/backtest'
 
 interface UseBacktestConfigReturn {
   // Symbol
@@ -35,6 +37,10 @@ interface UseBacktestConfigReturn {
   setDCAParams: (params: DCAParams) => void
   maParams: MACrossoverParams
   setMAParams: (params: MACrossoverParams) => void
+  rsiParams: RSIParams
+  setRSIParams: (params: RSIParams) => void
+  bbParams: BollingerBandsParams
+  setBBParams: (params: BollingerBandsParams) => void
 
   // Validation
   isValid: boolean
@@ -64,6 +70,8 @@ export function useBacktestConfig(): UseBacktestConfigReturn {
   const [strategy, setStrategy] = useState<StrategyType>('buy_and_hold')
   const [dcaParams, setDCAParams] = useState<DCAParams>(DEFAULT_DCA_PARAMS)
   const [maParams, setMAParams] = useState<MACrossoverParams>(DEFAULT_MA_PARAMS)
+  const [rsiParams, setRSIParams] = useState<RSIParams>(DEFAULT_RSI_PARAMS)
+  const [bbParams, setBBParams] = useState<BollingerBandsParams>(DEFAULT_BB_PARAMS)
 
   // Submission
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -112,8 +120,14 @@ export function useBacktestConfig(): UseBacktestConfigReturn {
         return dcaParams
       case 'ma_crossover':
         return maParams
+      case 'rsi':
+        return rsiParams
+      case 'bollinger_bands':
+        return bbParams
+      default:
+        return null
     }
-  }, [strategy, dcaParams, maParams])
+  }, [strategy, dcaParams, maParams, rsiParams, bbParams])
 
   // Validation
   const validationErrors = useMemo(() => {
@@ -135,8 +149,14 @@ export function useBacktestConfig(): UseBacktestConfigReturn {
       }
     }
 
+    if (strategy === 'rsi') {
+      if (rsiParams.oversold >= rsiParams.overbought) {
+        errors.push('RSI oversold must be below overbought threshold.')
+      }
+    }
+
     return errors
-  }, [symbol, dateFrom, dateTo, initialCapital, strategy, dcaParams, maParams])
+  }, [symbol, dateFrom, dateTo, initialCapital, strategy, dcaParams, maParams, rsiParams, bbParams])
 
   const isValid = validationErrors.length === 0
 
@@ -184,6 +204,10 @@ export function useBacktestConfig(): UseBacktestConfigReturn {
     setDCAParams,
     maParams,
     setMAParams,
+    rsiParams,
+    setRSIParams,
+    bbParams,
+    setBBParams,
     isValid,
     validationErrors,
     isSubmitting,
