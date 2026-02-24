@@ -6,6 +6,20 @@ MarketPl.ai is a small full-stack app for:
 - Exploring that data in a React UI
 - Running strategy backtests (single symbol, compare, and small portfolios)
 
+## Screenshots
+
+| Importing data | Exploring symbol data |
+|---|---|
+| ![Data importing](docs/screenshots/image-5.png) | ![Search symbol data](docs/screenshots/image.png) |
+
+| Single-symbol comparison | Trade logs |
+|---|---|
+| ![Comparison with single ticker](docs/screenshots/image-1.png) | ![Comparison with single ticker buy logs](docs/screenshots/image-2.png) |
+
+| Multi-ticker backtest | Multi-ticker + rebalancing |
+|---|---|
+| ![Testing strategy with multiple tickers](docs/screenshots/image-3.png) | ![Testing strategy with multiple tickers and rebalancing](docs/screenshots/image-4.png) |
+
 ## Tech Stack
 
 - Frontend: React + Vite + TypeScript (app/client)
@@ -20,12 +34,14 @@ MarketPl.ai is a small full-stack app for:
 
 ## Project Structure
 
+```text
 .
 ├── app/
 │   ├── client/          # React UI
 │   └── backend/         # FastAPI API
 ├── data_gathering/      # Helper scripts + example datasets
 └── docker-compose.yml   # MongoDB
+```
 
 ## Quickstart (Local Dev)
 
